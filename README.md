@@ -1,2 +1,2 @@
 # raman-proc
-Module for processing Laser-tweezers Raman data
+Files useful for processing Raman spectral data
