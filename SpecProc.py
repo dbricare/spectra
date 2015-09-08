@@ -4,6 +4,7 @@
 # Define a few global variables that may need infrequent modification
 ReadFolder = '/Volumes/TRANSFER/Raman/'
 WriteFolder = '/Volumes/TRANSFER/Analysis/'
+CalibFile = '/Users/dbricare/Documents/Python/Pixel-Wavenumber-Grating600-866.1nm.xls'
 SkipIdx = 1
 Order = 5
 Pixels = 1340
@@ -222,7 +223,7 @@ def specproc(FileNameList, FileBase):
 # Main
 
 import re
-from FileOpen import openFileDialog
+from ui_python.FileOpen import openFileDialog
 import time
 import numpy as np
 from scipy import signal
@@ -232,7 +233,7 @@ from sklearn.preprocessing import MinMaxScaler, normalize
 
 # Set a few more constant values
 PeakWidths=np.arange(1,30)
-WaveNumber = np.loadtxt('Pixel-Wavenumber-Grating600-866.1nm.xls', delimiter="\t")
+WaveNumber = np.loadtxt(CalibFile, delimiter="\t")
 WaveNumber = WaveNumber.reshape((Pixels,1))
 Wheader='Wave number\t'+'Average\t'+'Std dev\t'+'Peak locations\t'+ \
 'Peak intensity\t'+'Smoothed data'	
