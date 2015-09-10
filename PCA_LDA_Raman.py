@@ -24,7 +24,7 @@ ExplVar = 0.99
 
 def genLblList(FileList):
 	RemoveDir = [s.replace(ReadFolder,'') for s in FileList]
-	Suffix = '-SFN.xls'
+	Suffix = '-LNS.xls'
 	LblList = [s.replace(Suffix,'') for s in RemoveDir]
 
 	return(LblList)
@@ -107,10 +107,10 @@ def vis():
 	import ConfEllipse
 
 	plt.ion()
-	plt.rc('font', family = 'Arial', size='18')
+	plt.rc('font', family = 'Arial', size='16')
 
 	# Custom colors and markers
-	ColorOpts = ['RoyalBlue', 'FireBrick', 'OliveDrab', 'DarkCyan', 'Coral',  'CornflowerBlue', 'Tomato', 'YellowGreen', 'DarkViolet','DarkTurquoise']
+	ColorOpts = ['RoyalBlue', 'FireBrick', 'OliveDrab', 'DarkCyan', 'Coral', 'CornflowerBlue', 'SaddleBrown', 'YellowGreen', 'DarkViolet', 'DarkTurquoise']
 # 	ColorOpts = ['CornflowerBlue','YellowGreen','MediumPurple','Coral', 'DarkCyan',  'Crimson', 'Gold', 'BurlyWood', 'HotPink', 'SaddleBrown', 'Aqua', 'Lime']
 	ColorSeq = ColorOpts[:int(len(LblList)/ClassSubDiv)]*ClassSubDiv
 	MarkerOpts = ['x','o','s','^','D','x']
@@ -131,7 +131,7 @@ def vis():
 
 
 ### Plot first two principal components
-	fig = plt.figure(figsize=(12,8))
+	fig = plt.figure(figsize=(12,7))
 	ax = fig.add_subplot(111)
 	j = 0
 #	for i, c, class_name in zip(range(len(LblList)), ColorSeq, LblList):
@@ -157,13 +157,15 @@ def vis():
 	'Principal Component 2 '+'({:.1%})'.format(pca.explained_variance_ratio_[1]))
 	plt.xlabel(
 	'Principal Component 1 '+'({:.1%})'.format(pca.explained_variance_ratio_[0]))
-	plt.title('First two principal components')
+# 	plt.title('First two principal components')
 	PCAmax = np.amax(np.absolute(PCACoeff[:,:2]))
 	limLog = np.floor(np.log10(PCAmax))
 	limInt = np.ceil(PCAmax/(10**np.floor(np.log10(PCAmax))))
 	lim = limInt*(10**limLog)
 	plt.xlim(-1*lim,lim)
 	plt.ylim(-1*lim,lim)
+
+	plt.subplots_adjust(bottom=0.10,left=0.10,right=0.75,top=0.95,wspace=0.1,hspace=0.1)
 
 
 
