@@ -1,58 +1,43 @@
-"Module contains spectrum processing routines used on all files, consists of using Lieber method to remove background, smoothing with Savitzky-Golay and computing normalized and non-normalized results."
+"""
+Module contains spectrum processing routines used on all files, consists of using Lieber method to remove background, smoothing with Savitzky-Golay and computing normalized and non-normalized results.
+"""
 
-
+#--------------------------------------------------------------------------------------
 # Define a few global variables that may need infrequent modification
+
+
 ReadFolder = '/Volumes/TRANSFER/Raman/'
 WriteFolder = '/Volumes/TRANSFER/Analysis/'
-CalibFile = '/Users/dbricare/Documents/Python/Pixel-Wavenumber-Grating600-866.1nm.xls'
+CalibPath = '/Users/dbricare/Desktop/Chan Lab/Labwork/'
+# CalibFile = 'Pixel-Wavenumber-Grating600-866.1nm.xls'
+CalibFile = 'Pixel-Wavenumber-Optofluidics.xls'
 SkipIdx = 1
 Order = 5
 Pixels = 1340
 # For SERS suggest Divide1=190, for normal Raman suggest Divide1=130
-Divide1 = 90
-Divide2 = 1090
+Divide1 = 80
+Divide2 = 1330
 # StartSmooth = 50
 
 
-# Parse the arguments passed by the user
-import argparse
-parser = argparse.ArgumentParser(\
-description='to process spectra collected with the Raman trap')
 
-parser.add_argument('--sample', \
-help='average spectra by sample instead of by measurement', action='store_true')
-
-parser.add_argument("--bg", metavar='BGFILENAME', help='subtract BGFILENAME from spectra, exclude file extension and spectrum id', action='store')
-
-args = parser.parse_args()
-
-print('')
-if args.bg:
-	print('All spectra will be subtracted from indicated background.')
-
-if args.sample:
-	print('Spectra will be averaged across each SAMPLE.')
-else:
-	print('Spectra will be averaged across each MEASUREMENT.')
-	
-	
-Avg = args.sample
-bg = args.bg
+""""
+Begin function definitions
+"""
 
 
-## Start function definitions
-#
+
 #--------------------------------------------------------------------------------------
-
 def threepartfit(Data, Order=5):
+
+	"""
+	Piecewise modified polynomial fit
+	"""
 
 	import statsmodels.api as sm
 	from ModPolyFit import lieberfit
 	
-		
-# 	IdxLeft = int(len(Data)/20)
-# 	IdxRight = int(len(Data)/10)
-# 	IdxOuter = int(len(Data)/15)
+
 	IdxLeft = Divide1
 	IdxRight = Divide2
 
@@ -68,12 +53,13 @@ def threepartfit(Data, Order=5):
 			
 # Heavy smoothing of background curve to remove discontinuities at dividers
 	SmoothCurve=np.copy(Curvefit)
-	StartSmooth = int(IdxLeft-10)
+	StartSmooth = max(int(IdxLeft-10),0)
+	TruncLeft = max(StartSmooth,IdxLeft)
 	# Use locally-weighted linear regression to smooth curves over appropriate region
 	lowess = sm.nonparametric.lowess
-	x = range(StartSmooth,len(SmoothCurve))
-	filt = lowess(Curvefit[StartSmooth:],x,frac=0.1)
-	SmoothCurve[StartSmooth:] = filt[:,1]
+	x = range(TruncLeft,Pixels)
+	filt = lowess(Curvefit[TruncLeft:],x,frac=0.1)
+	SmoothCurve[TruncLeft:] = filt[:,1]
 
 
 # Subtract background and shift above zero
@@ -91,9 +77,11 @@ def threepartfit(Data, Order=5):
 
 
 #--------------------------------------------------------------------------------------
-# This function does the bulk of the spectrum processing
-
 def specproc(FileNameList, FileBase):
+
+	"""
+	Heavy lifting for spectrum processing
+	"""
 
 # Remove files (typically SkipIdx=1, the first file) due to instrument issues
 	if SkipIdx != 0 and SkipIdx > 0:
@@ -168,12 +156,11 @@ def specproc(FileNameList, FileBase):
 			RsltData = np.copy(SubtractedResult)
 		elif SaveExt == '-SFN':   # p-norm normalization
 			RsltData = normalize(SubtractedResult,norm='l1',axis=0)
-# 			import ipdb; ipdb.set_trace() # Breakpoint	
 		elif SaveExt == '-SFM':   # Min-max normalization
 			MMscale = MinMaxScaler()
 			RsltData = MMscale.fit_transform(SubtractedResult)
 		else:
-			raise NameError('Unknown processing method specified')
+			raise Exception('Unknown processing method specified')
 
 	# Calculate mean & std dev of smoothed/fitted data and background removal curves for visualization
 		Mean = np.mean(RsltData,axis=1)
@@ -219,69 +206,105 @@ def specproc(FileNameList, FileBase):
 	return(MeanCurve)
 
 
+
+"""
+End function definitions
+"""
+
+
+
 #--------------------------------------------------------------------------------------
 # Main
 
-import re
-from ui_python.FileOpen import openFileDialog
-import time
-import numpy as np
-from scipy import signal
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import MinMaxScaler, normalize
+if __name__ == '__main__':
 
+	# Parse the arguments passed by the user
+	import argparse
 
-# Set a few more constant values
-PeakWidths=np.arange(1,30)
-WaveNumber = np.loadtxt(CalibFile, delimiter="\t")
-WaveNumber = WaveNumber.reshape((Pixels,1))
-Wheader='Wave number\t'+'Average\t'+'Std dev\t'+'Peak locations\t'+ \
-'Peak intensity\t'+'Smoothed data'	
+	parser = argparse.ArgumentParser(\
+	description='to process spectra collected with the Raman trap')
 
+	parser.add_argument('--sample', \
+	help='average spectra by sample instead of by measurement', action='store_true')
 
-# Read in file names, Hierarchy: SampleID -> MeasurementID -> FileID
-FileList = list(openFileDialog(DialogCaption='Select spectrum files', \
-ReadFolder=ReadFolder, FileFilter=None))
-# Sort file list
-FileList.sort()
+	parser.add_argument("--bg", metavar='BGFILENAME', help='subtract BGFILENAME from spectra, exclude file extension and spectrum id', action='store')
 
+	args = parser.parse_args()
 
-# Identify file extension, typically .xls or .txt, check that all are the same
-#reExt = re.compile('[.]\w+$')
-global FileExt
-FileExt = ''.join(re.findall('[.]\w+$',FileList[0]))   # Convert list to str
-if not all(FileExt in s for s in FileList):
-	raise Exception('the selected files do not share a single file extension')
-
-
-# Start timer to track program run time
-startTime = time.time()
-
-
-# Identify sample and measurement/spectrum IDs
-if Avg:
-	Suffix = re.compile('[-]\d+_\d+[.]\w+$') # Remove Measurement & Spectrum ID		
-else:
-	Suffix = re.compile('_\d+[.]\w+$') # Remove Spectrum ID
-
-
-RemoveDir = [s.replace(ReadFolder,'') for s in FileList]
-RemoveSuffix = [Suffix.sub('',s) for s in RemoveDir]
-Spectra = list(set(RemoveSuffix))
-
-
-for i in range(len(Spectra)):
 	print('')
-	print('Processing:', Spectra[i])
-	#print('')
-	FileNames = [s for s in FileList if Spectra[i] in s]
+	if args.bg:
+		print('All spectra will be subtracted from indicated background.')
+
+	if args.sample:
+		print('Spectra will be averaged across each SAMPLE.')
+	else:
+		print('Spectra will be averaged across each MEASUREMENT.')
 	
 	
-	MeanCurve = specproc(FileNames, Spectra[i])
+	Avg = args.sample
+	bg = args.bg
 
 
-print('')			
-print('Elapsed time:', round(time.time()-startTime,1), 'seconds')
+	import re
+	from ui_python.FileOpen import openFileDialog
+	import time
+	import numpy as np
+	from scipy import signal
+	import matplotlib.pyplot as plt
+	from sklearn.preprocessing import MinMaxScaler, normalize
 
 
-# import ipdb; ipdb.set_trace() # Breakpoint	
+	# Set a few more constant values
+	PeakWidths=np.arange(1,30)
+	WaveNumber = np.loadtxt(CalibPath+CalibFile, delimiter="\t")
+	WaveNumber = WaveNumber.reshape((Pixels,1))
+	Wheader='Wave number\t'+'Average\t'+'Std dev\t'+'Peak locations\t'+ \
+	'Peak intensity\t'+'Smoothed data'	
+
+
+	# Read in file names, Hierarchy: SampleID -> MeasurementID -> FileID
+	FileList = list(openFileDialog(DialogCaption='Select spectrum files', \
+	ReadFolder=ReadFolder, FileFilter=None))
+	# Sort file list
+	FileList.sort()
+
+
+	# Identify file extension, typically .xls or .txt, check that all are the same
+	#reExt = re.compile('[.]\w+$')
+	global FileExt
+	FileExt = ''.join(re.findall('[.]\w+$',FileList[0]))   # Convert list to str
+	if not all(FileExt in s for s in FileList):
+		raise Exception('the selected files do not share a single file extension')
+
+
+	# Start timer to track program run time
+	startTime = time.time()
+
+
+	# Identify sample and measurement/spectrum IDs
+	if Avg:
+		Suffix = re.compile('[-]\d+_\d+[.]\w+$') # Remove Measurement & Spectrum ID		
+	else:
+		Suffix = re.compile('_\d+[.]\w+$') # Remove Spectrum ID
+
+
+	RemoveDir = [s.replace(ReadFolder,'') for s in FileList]
+	RemoveSuffix = [Suffix.sub('',s) for s in RemoveDir]
+	Spectra = list(set(RemoveSuffix))
+
+
+	for i in range(len(Spectra)):
+		print('')
+		print('Processing:', Spectra[i])
+		#print('')
+		FileNames = [s for s in FileList if Spectra[i] in s]
+	
+	
+		MeanCurve = specproc(FileNames, Spectra[i])
+
+
+	print('')			
+	print('Elapsed time:', round(time.time()-startTime,1), 'seconds')
+
+
+	# import ipdb; ipdb.set_trace() # Breakpoint	
