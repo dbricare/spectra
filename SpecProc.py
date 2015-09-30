@@ -2,28 +2,40 @@
 Module contains spectrum processing routines used on all files, consists of using Lieber method to remove background, smoothing with Savitzky-Golay and computing normalized and non-normalized results.
 """
 
-#--------------------------------------------------------------------------------------
-# Define a few global variables that may need infrequent modification
-
-
-ReadFolder = '/Volumes/TRANSFER/Raman/'
-WriteFolder = '/Volumes/TRANSFER/Analysis/'
-CalibPath = '/Users/dbricare/Desktop/Chan Lab/Labwork/'
-# CalibFile = 'Pixel-Wavenumber-Grating600-866.1nm.xls'
-CalibFile = 'Pixel-Wavenumber-Optofluidics.xls'
-SkipIdx = 1
-Order = 5
-Pixels = 1340
-# For SERS suggest Divide1=190, for normal Raman suggest Divide1=130
-Divide1 = 80
-Divide2 = 1330
-# StartSmooth = 50
-
 
 
 """"
 Begin function definitions
 """
+
+
+
+#--------------------------------------------------------------------------------------
+def onepartfit(Data, Order=5):
+
+	"""
+	Single, contiguous modified polynomial fit
+	"""
+
+	from ModPolyFit import lieberfit
+
+
+# Perform modified polynomial fit over entire data range
+	Curvefit = lieberfit(Data, Order)
+	
+	SmoothCurve = np.copy(Curvefit)		
+
+
+# Subtract background and shift above zero
+	np.copyto(SmoothCurve, Data-10, where = SmoothCurve > Data)
+
+	SubtractedResult=Data-SmoothCurve
+
+	while any(SubtractedResult<0):
+		SubtractedResult+=10
+	
+		
+	return(SubtractedResult, SmoothCurve)
 
 
 
@@ -55,14 +67,14 @@ def threepartfit(Data, Order=5):
 	SmoothCurve=np.copy(Curvefit)
 	StartSmooth = max(int(IdxLeft-10),0)
 	TruncLeft = max(StartSmooth,IdxLeft)
-	# Use locally-weighted linear regression to smooth curves over appropriate region
+# 	Use locally-weighted linear regression to smooth curves over appropriate region
 	lowess = sm.nonparametric.lowess
 	x = range(TruncLeft,Pixels)
 	filt = lowess(Curvefit[TruncLeft:],x,frac=0.1)
 	SmoothCurve[TruncLeft:] = filt[:,1]
 
 
-# Subtract background and shift above zero
+# 	Subtract background and shift above zero
 	np.copyto(SmoothCurve, Data-10, where = SmoothCurve > Data)
 	SubtractedResult=Data-SmoothCurve
 	while any(SubtractedResult<0):
@@ -111,11 +123,11 @@ def specproc(FileNameList, FileBase):
 
 # Background file processing
 	BGsub = np.zeros(Pixels)
-	if bg:
+	if args.bg:
 		BGfileCount = 3
 		BGspectrum = np.zeros((Pixels,BGfileCount))
 		for i in range(BGfileCount):
-			BGdata = np.loadtxt(ReadFolder+bg+'_'+str(i+1+SkipIdx)+FileExt)
+			BGdata = np.loadtxt(ReadFolder+args.bg+'_'+str(i+1+SkipIdx)+FileExt)
 			BGspectrum[:,i] = BGdata[:,1]
 		BGsub = np.mean(BGspectrum, axis=1)
 			
@@ -142,13 +154,16 @@ def specproc(FileNameList, FileBase):
 # Note: larger frames and lower order polynomial fits have stronger smoothing
 		SmoothData[:,i]=signal.savgol_filter(Raw[:,1,i] - 0.8*BGsub,11,1) 
 	
-		SubtractedResult[:,i], SmoothCurve[:,i] = threepartfit(SmoothData[:,i], Order)
+		if args.fit:
+			SubtractedResult[:,i], SmoothCurve[:,i] = onepartfit(SmoothData[:,i],fitorder)
+		else:
+			SubtractedResult[:,i], SmoothCurve[:,i] = threepartfit(SmoothData[:,i],Order)
 
 	MeanSmooth=np.mean(SmoothData,axis=1)
 	MeanCurve=np.mean(SmoothCurve,axis=1)
 	
 	
-	# Perform peak fitting, mean, std, and output all to tab-delimited files
+# 	Perform peak fitting, mean, std, and output all to tab-delimited files
 
 	def outputRslt(SaveExt):
 		
@@ -160,26 +175,26 @@ def specproc(FileNameList, FileBase):
 			MMscale = MinMaxScaler()
 			RsltData = MMscale.fit_transform(SubtractedResult)
 		else:
-			raise Exception('Unknown processing method specified')
+			raise Exception('Unknown processing method specified by programmer')
 
-	# Calculate mean & std dev of smoothed/fitted data and background removal curves for visualization
+# 	Calculate mean & std dev of smoothed/fitted data and background removal curves for visualization
 		Mean = np.mean(RsltData,axis=1)
 		Std = np.std(RsltData,axis=1)
 
-	# Find peaks of mean data with built in function that fits wavelets to data
+#	Find peaks of mean data with built in function that fits wavelets to data
+		PeakWidths=np.arange(1,30)
 		PkIdx = signal.find_peaks_cwt(Mean,PeakWidths)
 
-	# Compute peak locations and intensities for non-normalized and normalized results
+# 	Compute peak locations and intensities for non-normalized and normalized results
 		PkLoc = WaveNumber[PkIdx]
 		PkInt = Mean[PkIdx].reshape((len(PkIdx),1))
 	
-	# Extend peak data to the same length as other data in order to add to file output then sort in descending order.
+# 	Extend peak data to the same length as other data in order to add to file output then sort in descending order.
 		WritePeak = np.zeros((Pixels,2))
-	# 	import ipdb; ipdb.set_trace() # Breakpoint	
 		WritePeak[:len(PkIdx),:] = np.hstack((PkLoc, PkInt))
 		WritePeak = np.flipud(WritePeak[WritePeak[:,1].argsort()])
 
-	# Save results in a tab-delimited file with a .xls extension for import into Excel	
+# 	Save results in a tab-delimited file with a .xls extension for import into Excel	
 		Wname = WriteFolder+FileBase+SaveExt+'.xls'
 		Wdata = np.hstack((WaveNumber, Mean.reshape((Pixels,1)), Std.reshape((Pixels,1)), WritePeak, RsltData))
 		np.savetxt(Wname, Wdata, fmt='%g', delimiter='\t', header=Wheader, comments='')
@@ -197,11 +212,18 @@ def specproc(FileNameList, FileBase):
 			plt.figure()
 			plt.plot(WaveNumber,MeanCurve,color='red')
 			plt.plot(WaveNumber,MeanSmooth,color='blue')
-			plt.axvline(x=WaveNumber[Divide1],color='k',ls='--',lw=1)
-			plt.axvline(x=WaveNumber[Divide2],color='k',ls='--',lw=1)
 			plt.title(FileBase+' - Smoothed & curve fit')
-		
+			if not args.fit:
+				plt.axvline(x=WaveNumber[Divide1],color='k',ls='--',lw=1)
+				plt.axvline(x=WaveNumber[Divide2],color='k',ls='--',lw=1)
+			else:
+				plt.axvline(x=WaveNumber[0],color='k',ls='--',lw=1)
+				plt.axvline(x=WaveNumber[-1],color='k',ls='--',lw=1)
+
+	
+# 	No need to print out results from list comprehension	
 	NoDisplay = [outputRslt(s) for s in ['-SFM','-SFN','-SF']]
+	
 	
 	return(MeanCurve)
 
@@ -216,89 +238,104 @@ End function definitions
 #--------------------------------------------------------------------------------------
 # Main
 
+# As of 2015-09-29, this file is not configured for use as an importable module
 if __name__ == '__main__':
 
-	# Parse the arguments passed by the user
-	import argparse
 
-	parser = argparse.ArgumentParser(\
-	description='to process spectra collected with the Raman trap')
-
-	parser.add_argument('--sample', \
-	help='average spectra by sample instead of by measurement', action='store_true')
-
-	parser.add_argument("--bg", metavar='BGFILENAME', help='subtract BGFILENAME from spectra, exclude file extension and spectrum id', action='store')
-
-	args = parser.parse_args()
-
-	print('')
-	if args.bg:
-		print('All spectra will be subtracted from indicated background.')
-
-	if args.sample:
-		print('Spectra will be averaged across each SAMPLE.')
-	else:
-		print('Spectra will be averaged across each MEASUREMENT.')
-	
-	
-	Avg = args.sample
-	bg = args.bg
+# 	Define a few global variables that may need infrequent modification
+	ReadFolder = '/Volumes/TRANSFER/Raman/'
+	WriteFolder = '/Volumes/TRANSFER/Analysis/'
+	CalibPath = '/Users/dbricare/Desktop/Chan Lab/Labwork/'
+# 	CalibFile = 'Pixel-Wavenumber-Grating600-866.1nm.xls'
+	CalibFile = 'Pixel-Wavenumber-Optofluidics.xls'
+	SkipIdx = 1
+	Order = 5
+	Pixels = 1340
+# 	For SERS suggest Divide1=190, for normal Raman suggest Divide1=130
+	Divide1 = 80
+	Divide2 = 1330
+# 	StartSmooth = 50
 
 
-	import re
+# 	Import libraries
+	import re, argparse, time
 	from ui_python.FileOpen import openFileDialog
-	import time
 	import numpy as np
 	from scipy import signal
 	import matplotlib.pyplot as plt
 	from sklearn.preprocessing import MinMaxScaler, normalize
 
 
-	# Set a few more constant values
-	PeakWidths=np.arange(1,30)
+# 	Parse the arguments passed by the user
+	parser = argparse.ArgumentParser(description='process Raman spectra')
+
+	parser.add_argument('--sample', \
+	help='average spectra by sample instead of by measurement', action='store_true')
+
+	parser.add_argument("--bg", help='subtract BGFILENAME from spectra, exclude file extension and spectrum id', action='store')
+	
+	parser.add_argument("--fit", help='Perform one and three part modified polynomial fit', action='store')
+
+	args = parser.parse_args()
+	
+	
+# 	Provide feedback to user and set
+	print('')
+	
+	if args.bg:
+		print('All spectra will be subtracted from indicated background.')
+
+	if args.sample:
+		print('Spectra will be averaged across each SAMPLE.')
+		Suffix = re.compile('[-]\d+_\d+[.]\w+$') # Remove Measurement & Spectrum ID	
+	else:
+		print('Spectra will be averaged across each MEASUREMENT.')
+		Suffix = re.compile('_\d+[.]\w+$') # Remove Spectrum ID
+		
+	if args.fit:
+		print('Performing one part polynomial fit with indicated order.')
+		fitorder = int(args.fit)
+	else:
+		print('Performing three part fit with default polynomial orders.')	
+	
+
+
+# 	Load wavenumber calibration from file
 	WaveNumber = np.loadtxt(CalibPath+CalibFile, delimiter="\t")
 	WaveNumber = WaveNumber.reshape((Pixels,1))
 	Wheader='Wave number\t'+'Average\t'+'Std dev\t'+'Peak locations\t'+ \
 	'Peak intensity\t'+'Smoothed data'	
 
 
-	# Read in file names, Hierarchy: SampleID -> MeasurementID -> FileID
+# 	Read in file names, Hierarchy: SampleID -> MeasurementID -> FileID
 	FileList = list(openFileDialog(DialogCaption='Select spectrum files', \
 	ReadFolder=ReadFolder, FileFilter=None))
 	# Sort file list
 	FileList.sort()
 
 
-	# Identify file extension, typically .xls or .txt, check that all are the same
-	#reExt = re.compile('[.]\w+$')
-	global FileExt
+# 	Identify file extension, typically .xls or .txt, check that all are the same
 	FileExt = ''.join(re.findall('[.]\w+$',FileList[0]))   # Convert list to str
 	if not all(FileExt in s for s in FileList):
-		raise Exception('the selected files do not share a single file extension')
+		raise Exception('selected files must share a single file extension')
 
 
-	# Start timer to track program run time
+# 	Start timer to monitor program run time
 	startTime = time.time()
 
 
-	# Identify sample and measurement/spectrum IDs
-	if Avg:
-		Suffix = re.compile('[-]\d+_\d+[.]\w+$') # Remove Measurement & Spectrum ID		
-	else:
-		Suffix = re.compile('_\d+[.]\w+$') # Remove Spectrum ID
-
-
+# 	Begin filename processing
 	RemoveDir = [s.replace(ReadFolder,'') for s in FileList]
 	RemoveSuffix = [Suffix.sub('',s) for s in RemoveDir]
 	Spectra = list(set(RemoveSuffix))
 
 
+# 	For loop used to process files and return mean curve for visual check
 	for i in range(len(Spectra)):
 		print('')
 		print('Processing:', Spectra[i])
-		#print('')
+		
 		FileNames = [s for s in FileList if Spectra[i] in s]
-	
 	
 		MeanCurve = specproc(FileNames, Spectra[i])
 
