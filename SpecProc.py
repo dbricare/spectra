@@ -27,7 +27,7 @@ def onepartfit(Data, Order=5):
 
 
 # Subtract background and shift above zero
-	np.copyto(SmoothCurve, Data-10, where = SmoothCurve > Data)
+	np.copyto(SmoothCurve, Data, where = SmoothCurve > Data)
 
 	SubtractedResult=Data-SmoothCurve
 
@@ -75,7 +75,7 @@ def threepartfit(Data, Order=5):
 
 
 # 	Subtract background and shift above zero
-	np.copyto(SmoothCurve, Data-10, where = SmoothCurve > Data)
+	np.copyto(SmoothCurve, Data, where = SmoothCurve > Data)
 	SubtractedResult=Data-SmoothCurve
 	while any(SubtractedResult<0):
 		SubtractedResult+=10
@@ -180,6 +180,8 @@ def specproc(FileNameList, FileBase):
 # 	Calculate mean & std dev of smoothed/fitted data and background removal curves for visualization
 		Mean = np.mean(RsltData,axis=1)
 		Std = np.std(RsltData,axis=1)
+		specmin = np.amin(RsltData,axis=1)
+		specmax = np.amax(RsltData,axis=1)
 
 #	Find peaks of mean data with built in function that fits wavelets to data
 		PeakWidths=np.arange(1,30)
@@ -196,11 +198,15 @@ def specproc(FileNameList, FileBase):
 
 # 	Save results in a tab-delimited file with a .xls extension for import into Excel	
 		Wname = WriteFolder+FileBase+SaveExt+'.xls'
-		Wdata = np.hstack((WaveNumber, Mean.reshape((Pixels,1)), Std.reshape((Pixels,1)), WritePeak, RsltData))
+		T = (Pixels,1)
+		Wdata = np.hstack((WaveNumber, Mean.reshape(T), specmin.reshape(T),\
+		specmax.reshape(T), Std.reshape(T), WritePeak, RsltData))
+		Wheader='Wave number\t'+'Mean\t'+'Min\t'+'Max\t'+'Std dev\t'\
+		+'Peak locations\t'+'Peak intensity\t'+'Smoothed data'	
 		np.savetxt(Wname, Wdata, fmt='%g', delimiter='\t', header=Wheader, comments='')
 	
+# 		Visualize results just once not three times
 		if SaveExt == '-SF':
-	# Visualize results
 			plt.rc('font', family = 'Arial', size='14')
 			plt.ion()
 	
@@ -220,6 +226,12 @@ def specproc(FileNameList, FileBase):
 				plt.axvline(x=WaveNumber[0],color='k',ls='--',lw=1)
 				plt.axvline(x=WaveNumber[-1],color='k',ls='--',lw=1)
 
+# 			Create min/max plot, first row is not shown in plot (fn expects header row)
+			from plotting.makeplot import fillbtwn
+# 			plt.ioff()
+			fillbtwn(Wdata[:,:4], savename=FileBase)
+# 			plt.ion()
+	
 	
 # 	No need to print out results from list comprehension	
 	NoDisplay = [outputRslt(s) for s in ['-SFM','-SFN','-SF']]
@@ -245,7 +257,7 @@ if __name__ == '__main__':
 # 	Define a few global variables that may need infrequent modification
 	ReadFolder = '/Volumes/TRANSFER/Raman/'
 	WriteFolder = '/Volumes/TRANSFER/Analysis/'
-	CalibPath = '/Users/dbricare/Desktop/Chan Lab/Labwork/'
+	CalibPath = '/Users/dbricare/Desktop/CBST Lab/Labwork/'
 # 	CalibFile = 'Pixel-Wavenumber-Grating600-866.1nm.xls'
 	CalibFile = 'Pixel-Wavenumber-Optofluidics.xls'
 	SkipIdx = 1
@@ -272,9 +284,9 @@ if __name__ == '__main__':
 	parser.add_argument('--sample', \
 	help='average spectra by sample instead of by measurement', action='store_true')
 
-	parser.add_argument("--bg", help='subtract BGFILENAME from spectra, exclude file extension and spectrum id', action='store')
+	parser.add_argument("--bg", metavar='BGFILENAME', help='subtract BGFILENAME from spectra, exclude file extension and spectrum id in BGFILENAME', action='store')
 	
-	parser.add_argument("--fit", help='Perform one and three part modified polynomial fit', action='store')
+	parser.add_argument("--fit", metavar='ORDER', help='Perform one and three part modified polynomial fit with specified ORDER', action='store')
 
 	args = parser.parse_args()
 	
@@ -293,18 +305,15 @@ if __name__ == '__main__':
 		Suffix = re.compile('_\d+[.]\w+$') # Remove Spectrum ID
 		
 	if args.fit:
-		print('Performing one part polynomial fit with indicated order.')
+		print('Performing one part polynomial fit with order={}.'.format(int(args.fit)))
 		fitorder = int(args.fit)
 	else:
-		print('Performing three part fit with default polynomial orders.')	
-	
+		print('Performing three part fit with default polynomial orders.')		
 
 
 # 	Load wavenumber calibration from file
 	WaveNumber = np.loadtxt(CalibPath+CalibFile, delimiter="\t")
 	WaveNumber = WaveNumber.reshape((Pixels,1))
-	Wheader='Wave number\t'+'Average\t'+'Std dev\t'+'Peak locations\t'+ \
-	'Peak intensity\t'+'Smoothed data'	
 
 
 # 	Read in file names, Hierarchy: SampleID -> MeasurementID -> FileID
