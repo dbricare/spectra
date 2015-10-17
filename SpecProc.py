@@ -159,7 +159,7 @@ def specproc(FileNameList, FileBase):
 		SmoothData[:,i]=signal.savgol_filter(Raw[:,1,i] - 0.8*BGsub,11,1) 
 	
 		if args.fit:
-			SubtractedResult[:,i], SmoothCurve[:,i] = onepartfit(SmoothData[:,i],fitorder)
+			SubtractedResult[:,i], SmoothCurve[:,i] = onepartfit(SmoothData[:,i],fitordr)
 		else:
 			SubtractedResult[:,i], SmoothCurve[:,i] = threepartfit(SmoothData[:,i],Order)
 
@@ -326,14 +326,13 @@ if __name__ == '__main__':
 		
 	if args.fit:
 		print('Performing one part polynomial fit with order={}.'.format(int(args.fit)))
-		fitorder = int(args.fit)
+		fitordr = int(args.fit)
 	else:
 		print('Performing three part fit with default polynomial orders.')		
 
 
 # 	Load wavenumber calibration from file
 	WaveNumber = np.loadtxt(CalibPath+CalibFile, delimiter="\t")
-# 	WaveNumber = WaveNumber.reshape((Pixels,1))
 
 
 # 	Read in file names, Hierarchy: SampleID -> MeasurementID -> FileID
