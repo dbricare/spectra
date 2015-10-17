@@ -31,7 +31,7 @@ def onepartfit(Data, Order=5):
 
 	SubtractedResult=Data-SmoothCurve
 
-	while any(SubtractedResult<0):
+	while any(SubtractedResult<=0):
 		SubtractedResult+=10
 	
 		
@@ -76,12 +76,14 @@ def threepartfit(Data, Order=5):
 
 # 	Subtract background and shift above zero
 	np.copyto(SmoothCurve, Data, where = SmoothCurve > Data)
+	
 	SubtractedResult=Data-SmoothCurve
-	while any(SubtractedResult<0):
+	
+	while any(SubtractedResult<=0):
 		SubtractedResult+=10
 
 
-	SmoothCurve[StartSmooth:]=signal.savgol_filter(SmoothCurve[StartSmooth:],11,1)	
+# 	SmoothCurve[StartSmooth:]=signal.savgol_filter(SmoothCurve[StartSmooth:],11,1)	
 		
 		
 	return(SubtractedResult, SmoothCurve)
@@ -95,8 +97,9 @@ def specproc(FileNameList, FileBase):
 	Heavy lifting for spectrum processing
 	"""
 
+
 # Remove files (typically SkipIdx=1, the first file) due to instrument issues
-	if SkipIdx != 0 and SkipIdx > 0:
+	if SkipIdx > 0:
 		FileIdx=[]
 		Suffix='_'+str(SkipIdx)+FileExt
 		for Idx,Name in enumerate(FileNameList):
@@ -109,16 +112,17 @@ def specproc(FileNameList, FileBase):
 		raise Exception('Skipped file must be indexed with a positive integer.')
 
 
-	NumberFiles=len(SkippedList)
+	numfiles=len(SkippedList)
+	currfiles = [s.replace(ReadFolder,'').replace(FileExt,'') for s in SkippedList]
 		
 		
 # Initiate matrices for spectrum and wavenumber data.
-	FullName = ['' for i in range(NumberFiles)]
-	Raw = np.zeros((Pixels,2,NumberFiles))   # 3d array
-	SmoothData = np.zeros((Pixels,NumberFiles))   # 2d arrays here on
-	Curve = np.zeros((Pixels,NumberFiles))
-	SmoothCurve = np.zeros((Pixels,NumberFiles))
-	SubtractedResult = np.zeros((Pixels,NumberFiles))
+	FullName = ['' for i in range(numfiles)]
+	Raw = np.zeros((Pixels,2,numfiles))   # 3d array
+	SmoothData = np.zeros((Pixels,numfiles))   # 2d arrays here on
+	Curve = np.zeros((Pixels,numfiles))
+	SmoothCurve = np.zeros((Pixels,numfiles))
+	SubtractedResult = np.zeros((Pixels,numfiles))
 
 
 # Background file processing
@@ -133,9 +137,9 @@ def specproc(FileNameList, FileBase):
 			
 			
 # Load files and perform background fit
-	for i in range(NumberFiles):
+	for i in range(numfiles):
 		Raw[:,:,i]=np.loadtxt(SkippedList[i],delimiter="\t")
-	
+		
 	
 # Check for instrument error where consecutive spectra share many identical values
 		if i > 0: 
@@ -167,6 +171,8 @@ def specproc(FileNameList, FileBase):
 
 	def outputRslt(SaveExt):
 		
+		import pandas as pd
+		
 		if SaveExt == '-SF':   # No normalization
 			RsltData = np.copy(SubtractedResult)
 		elif SaveExt == '-SFN':   # p-norm normalization
@@ -177,33 +183,41 @@ def specproc(FileNameList, FileBase):
 		else:
 			raise Exception('Unknown processing method specified by programmer')
 
-# 	Calculate mean & std dev of smoothed/fitted data and background removal curves for visualization
+
+# 	Calculate mean & std dev of smoothed/fitted data and background removal curves for visualization and create dataframe
 		Mean = np.mean(RsltData,axis=1)
 		Std = np.std(RsltData,axis=1)
 		specmin = np.amin(RsltData,axis=1)
 		specmax = np.amax(RsltData,axis=1)
+		
+		dsstat = list(zip(WaveNumber, Mean, Std, specmin, specmax))
+		colstat = ['Wavenumber', 'Mean', 'Std dev', 'Min', 'Max']
+		dfstat = pd.DataFrame(data=dsstat, columns=colstat)
+
 
 #	Find peaks of mean data with built in function that fits wavelets to data
 		PeakWidths=np.arange(1,30)
 		PkIdx = signal.find_peaks_cwt(Mean,PeakWidths)
 
-# 	Compute peak locations and intensities for non-normalized and normalized results
-		PkLoc = WaveNumber[PkIdx]
-		PkInt = Mean[PkIdx].reshape((len(PkIdx),1))
-	
-# 	Extend peak data to the same length as other data in order to add to file output then sort in descending order.
-		WritePeak = np.zeros((Pixels,2))
-		WritePeak[:len(PkIdx),:] = np.hstack((PkLoc, PkInt))
-		WritePeak = np.flipud(WritePeak[WritePeak[:,1].argsort()])
 
-# 	Save results in a tab-delimited file with a .xls extension for import into Excel	
-		Wname = WriteFolder+FileBase+SaveExt+'.xls'
-		T = (Pixels,1)
-		Wdata = np.hstack((WaveNumber, Mean.reshape(T), specmin.reshape(T),\
-		specmax.reshape(T), Std.reshape(T), WritePeak, RsltData))
-		Wheader='Wave number\t'+'Mean\t'+'Min\t'+'Max\t'+'Std dev\t'\
-		+'Peak locations\t'+'Peak intensity\t'+'Smoothed data'	
-		np.savetxt(Wname, Wdata, fmt='%g', delimiter='\t', header=Wheader, comments='')
+# 	Compute peak locations and intensities for non-normalized and normalized results and create dataframe
+		pkloc = WaveNumber[PkIdx]
+		pkint = Mean[PkIdx]
+		
+		dspks = list(zip(pkloc, pkint))
+		colpks = ['Peak Locations', 'Peak Intensity']
+		dfpks = pd.DataFrame(data=dspks, columns=colpks)
+		dfpks.sort_values(by='Peak Intensity', ascending=False, inplace=True)
+		dfpks.index = range(dfpks.shape[0])
+
+
+# 		Use pandas to save results as an Excel file, include each spectrum
+		dfrslt = pd.DataFrame(data=RsltData, columns=currfiles)
+
+		dfwrite = pd.concat([dfstat, dfpks, dfrslt], axis=1)
+		namewrite = WriteFolder+FileBase+SaveExt+'.xlsx'
+		dfwrite.to_excel(namewrite, header=True, index=False)
+	
 	
 # 		Visualize results just once not three times
 		if SaveExt == '-SF':
@@ -212,7 +226,7 @@ def specproc(FileNameList, FileBase):
 	
 			plt.figure()
 			plt.plot(WaveNumber,Mean,color='blue')
-			plt.plot(PkLoc,PkInt+max(Mean)*0.03,"o",color="green",markersize=6)
+			plt.plot(pkloc,pkint+max(Mean)*0.03,"o",color="green",markersize=6)
 			plt.title(FileBase+' - Subtracted with peaks')
 
 			plt.figure()
@@ -229,7 +243,8 @@ def specproc(FileNameList, FileBase):
 # 			Create min/max plot, first row is not shown in plot (fn expects header row)
 			from plotting.makeplot import fillbtwn
 # 			plt.ioff()
-			fillbtwn(Wdata[:,:4], savename=FileBase)
+# 			fillbtwn(Wdata[:,:4], savename=FileBase)
+# 			fillbtwn(Wdata[:,:4], savename=None)
 # 			plt.ion()
 	
 	
@@ -286,7 +301,7 @@ if __name__ == '__main__':
 
 	parser.add_argument("--bg", metavar='BGFILENAME', help='subtract BGFILENAME from spectra, exclude file extension and spectrum id in BGFILENAME', action='store')
 	
-	parser.add_argument("--fit", metavar='ORDER', help='Perform one and three part modified polynomial fit with specified ORDER', action='store')
+	parser.add_argument("--fit", metavar='ORDER', help='Perform one part modified polynomial fit with specified ORDER, otherwise three part fit', action='store')
 
 	args = parser.parse_args()
 	
@@ -296,13 +311,18 @@ if __name__ == '__main__':
 	
 	if args.bg:
 		print('All spectra will be subtracted from indicated background.')
+		print('')
+
+	print('Each sample has several measurements which consist of several spectra.')
 
 	if args.sample:
-		print('Spectra will be averaged across each SAMPLE.')
+		print('Results will be averaged across each sample.')
 		Suffix = re.compile('[-]\d+_\d+[.]\w+$') # Remove Measurement & Spectrum ID	
 	else:
-		print('Spectra will be averaged across each MEASUREMENT.')
+		print('Results will be averaged across each measurement.')
 		Suffix = re.compile('_\d+[.]\w+$') # Remove Spectrum ID
+		
+	print('')
 		
 	if args.fit:
 		print('Performing one part polynomial fit with order={}.'.format(int(args.fit)))
@@ -313,14 +333,18 @@ if __name__ == '__main__':
 
 # 	Load wavenumber calibration from file
 	WaveNumber = np.loadtxt(CalibPath+CalibFile, delimiter="\t")
-	WaveNumber = WaveNumber.reshape((Pixels,1))
+# 	WaveNumber = WaveNumber.reshape((Pixels,1))
 
 
 # 	Read in file names, Hierarchy: SampleID -> MeasurementID -> FileID
 	FileList = list(openFileDialog(DialogCaption='Select spectrum files', \
 	ReadFolder=ReadFolder, FileFilter=None))
-	# Sort file list
-	FileList.sort()
+
+
+# 	Use natural sorting for file list so it looks nicer
+	convert = lambda text: int(text) if text.isdigit() else text
+	alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)]
+	FileList.sort(key=alphanum_key)
 
 
 # 	Identify file extension, typically .xls or .txt, check that all are the same
@@ -343,9 +367,10 @@ if __name__ == '__main__':
 	for i in range(len(Spectra)):
 		print('')
 		print('Processing:', Spectra[i])
-		
+				
+# 		File names to pass to specproc is different	for sample or measurement averaging
 		FileNames = [s for s in FileList if Spectra[i] in s]
-	
+
 		MeanCurve = specproc(FileNames, Spectra[i])
 
 
