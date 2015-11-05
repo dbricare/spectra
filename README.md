@@ -1,2 +1,2 @@
-# raman
-Files useful for processing Raman spectral data
+# spectra
+Files useful for processing spectral data such as from Raman or Laser-induced breakdown spectroscopy (LIBS)
