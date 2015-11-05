@@ -13,7 +13,7 @@ Begin function definitions
 
 
 #--------------------------------------------------------------------------------------
-def onepartfit(Data, Order=5):
+def onepartfit(Data, Order=0):
 
 	"""
 	Single, contiguous modified polynomial fit
@@ -35,8 +35,7 @@ def onepartfit(Data, Order=5):
 
 	while any(SubtractedResult<=0):
 		SubtractedResult+=10
-	
-		
+
 	return(SubtractedResult, SmoothCurve)
 
 
@@ -195,7 +194,7 @@ def specproc(FileNameList, FileBase):
 		specmax = np.amax(RsltData,axis=1)
 		
 		dsstat = list(zip(specunits, Mean, Std, specmin, specmax))
-		colstat = ['specunits', 'Mean', 'Std dev', 'Min', 'Max']
+		colstat = [xlbl, 'Mean', 'Std dev', 'Min', 'Max']
 		dfstat = pd.DataFrame(data=dsstat, columns=colstat)
 
 
@@ -237,8 +236,8 @@ def specproc(FileNameList, FileBase):
 			plt.plot(specunits,MeanCurve,color='red')
 			plt.plot(specunits,MeanSmooth,color='blue')
 			plt.title(FileBase+' - Smoothed & curve fit')
-			plt.axvline(x=specunits[0],color='k',ls='--',lw=1)
-			plt.axvline(x=specunits[-1],color='k',ls='--',lw=1)
+			plt.axvline(x=specunits[Divide1],color='k',ls='--',lw=1)
+			plt.axvline(x=specunits[Divide2],color='k',ls='--',lw=1)
 
 # 			Create min/max plot, first row is not shown in plot (fn expects header row)
 			from plotting.makeplot import fillbtwn
@@ -326,7 +325,8 @@ if __name__ == '__main__':
 		Divide2 = 1725
 		Pixels = 3648
 		fitordr = 0
-		SkipIdx = 1
+		SkipIdx = 0
+		xlbl = 'Wavelength(nm)'
 	elif str.lower(args.src) == 'tweez':
 		ReadFolder = '/Volumes/TRANSFER/Raman/'
 		CalibFile = 'Pixel-WaveNumber-Grating600-866.1nm.xls'
@@ -335,6 +335,7 @@ if __name__ == '__main__':
 		Divide2 = 1090
 		Pixels = 1340
 		SkipIdx = 1
+		xlbl = 'Wave number(1/cm)'
 	elif str.lower(args.src) == 'opto':	
 		ReadFolder = '/Volumes/TRANSFER/Raman/'
 		CalibFile = 'Pixel-WaveNumber-Optofluidics.xls'
@@ -343,6 +344,7 @@ if __name__ == '__main__':
 		Pixels = 1340
 		SkipIdx = 0
 		fitordr = 5
+		xlbl = 'Wave number(1/cm)'
 	else:
 		raise Exception('data source must be either libs or tweez or opto')
 
