@@ -1,2 +1,2 @@
-# raman_proc
+# raman
 Files useful for processing Raman spectral data
