@@ -1,5 +1,7 @@
 """
 Module contains spectrum processing routines used on all files, consists of using Lieber method to remove background, smoothing with Savitzky-Golay and computing normalized and non-normalized results.
+
+Assumes tab-delimited files where first column is spectrum units and second column is intensity values.
 """
 
 
@@ -116,7 +118,7 @@ def specproc(FileNameList, FileBase):
 	currfiles = [s.replace(ReadFolder,'').replace(FileExt,'') for s in SkippedList]
 		
 		
-# Initiate matrices for spectrum and wavenumber data.
+# Initiate matrices for spectrum and specunits data.
 	FullName = ['' for i in range(numfiles)]
 	Raw = np.zeros((Pixels,2,numfiles))   # 3d array
 	SmoothData = np.zeros((Pixels,numfiles))   # 2d arrays here on
@@ -128,7 +130,7 @@ def specproc(FileNameList, FileBase):
 # Background file processing
 	BGsub = np.zeros(Pixels)
 	if args.bg:
-		BGfileCount = 3
+		BGfileCount = 3   # must be set manually
 		BGspectrum = np.zeros((Pixels,BGfileCount))
 		for i in range(BGfileCount):
 			BGdata = np.loadtxt(ReadFolder+args.bg+'_'+str(i+1+SkipIdx)+FileExt)
@@ -157,11 +159,13 @@ def specproc(FileNameList, FileBase):
 # Apply Savitzky-Golay filtering (11-point window, 1st order polynomial)
 # Note: larger frames and lower order polynomial fits have stronger smoothing
 		SmoothData[:,i]=signal.savgol_filter(Raw[:,1,i] - 0.8*BGsub,11,1) 
-	
-		if args.fit:
-			SubtractedResult[:,i], SmoothCurve[:,i] = onepartfit(SmoothData[:,i],fitordr)
-		else:
-			SubtractedResult[:,i], SmoothCurve[:,i] = threepartfit(SmoothData[:,i],Order)
+
+
+# Perform modified polynomial fit
+		if str.lower(args.src)=='tweez':
+			SubtractedResult[:,i],SmoothCurve[:,i] = threepartfit(SmoothData[:,i],fitordr)
+		else:   # args.src is libs or opto
+			SubtractedResult[:,i],SmoothCurve[:,i] = onepartfit(SmoothData[:,i],fitordr)
 
 	MeanSmooth=np.mean(SmoothData,axis=1)
 	MeanCurve=np.mean(SmoothCurve,axis=1)
@@ -190,8 +194,8 @@ def specproc(FileNameList, FileBase):
 		specmin = np.amin(RsltData,axis=1)
 		specmax = np.amax(RsltData,axis=1)
 		
-		dsstat = list(zip(WaveNumber, Mean, Std, specmin, specmax))
-		colstat = ['Wavenumber', 'Mean', 'Std dev', 'Min', 'Max']
+		dsstat = list(zip(specunits, Mean, Std, specmin, specmax))
+		colstat = ['specunits', 'Mean', 'Std dev', 'Min', 'Max']
 		dfstat = pd.DataFrame(data=dsstat, columns=colstat)
 
 
@@ -201,7 +205,7 @@ def specproc(FileNameList, FileBase):
 
 
 # 	Compute peak locations and intensities for non-normalized and normalized results and create dataframe
-		pkloc = WaveNumber[PkIdx]
+		pkloc = specunits[PkIdx]
 		pkint = Mean[PkIdx]
 		
 		dspks = list(zip(pkloc, pkint))
@@ -225,20 +229,16 @@ def specproc(FileNameList, FileBase):
 			plt.ion()
 	
 			plt.figure()
-			plt.plot(WaveNumber,Mean,color='blue')
+			plt.plot(specunits,Mean,color='blue')
 			plt.plot(pkloc,pkint+max(Mean)*0.03,"o",color="green",markersize=6)
 			plt.title(FileBase+' - Subtracted with peaks')
 
 			plt.figure()
-			plt.plot(WaveNumber,MeanCurve,color='red')
-			plt.plot(WaveNumber,MeanSmooth,color='blue')
+			plt.plot(specunits,MeanCurve,color='red')
+			plt.plot(specunits,MeanSmooth,color='blue')
 			plt.title(FileBase+' - Smoothed & curve fit')
-			if not args.fit:
-				plt.axvline(x=WaveNumber[Divide1],color='k',ls='--',lw=1)
-				plt.axvline(x=WaveNumber[Divide2],color='k',ls='--',lw=1)
-			else:
-				plt.axvline(x=WaveNumber[0],color='k',ls='--',lw=1)
-				plt.axvline(x=WaveNumber[-1],color='k',ls='--',lw=1)
+			plt.axvline(x=specunits[0],color='k',ls='--',lw=1)
+			plt.axvline(x=specunits[-1],color='k',ls='--',lw=1)
 
 # 			Create min/max plot, first row is not shown in plot (fn expects header row)
 			from plotting.makeplot import fillbtwn
@@ -270,43 +270,38 @@ if __name__ == '__main__':
 
 
 # 	Define a few global variables that may need infrequent modification
-	ReadFolder = '/Volumes/TRANSFER/Raman/'
 	WriteFolder = '/Volumes/TRANSFER/Analysis/'
 	CalibPath = '/Users/dbricare/Desktop/CBST Lab/Labwork/'
-# 	CalibFile = 'Pixel-Wavenumber-Grating600-866.1nm.xls'
-	CalibFile = 'Pixel-Wavenumber-Optofluidics.xls'
-	SkipIdx = 1
-	Order = 5
-	Pixels = 1340
-# 	For SERS suggest Divide1=190, for normal Raman suggest Divide1=130
-	Divide1 = 80
-	Divide2 = 1330
-# 	StartSmooth = 50
 
 
 # 	Import libraries
 	import re, argparse, time
-	from my-py-util.FileOpen import openFileDialog
 	import numpy as np
 	from scipy import signal
 	import matplotlib.pyplot as plt
 	from sklearn.preprocessing import MinMaxScaler, normalize
 
+	import sys
+	sys.path.append('/Users/dbricare/Documents/Python/mypyutil')
+	from FileOpen import openfdiag
+# 	from . import mypyutil
+
 
 # 	Parse the arguments passed by the user
 	parser = argparse.ArgumentParser(description='process Raman spectra')
 
-	parser.add_argument('--sample', \
+	parser.add_argument("src", metavar='SOURCE', 
+	help='either libs or tweez or opto', action='store')
+	
+	parser.add_argument('--sample', 
 	help='average spectra by sample instead of by measurement', action='store_true')
 
 	parser.add_argument("--bg", metavar='BGFILENAME', help='subtract BGFILENAME from spectra, exclude file extension and spectrum id in BGFILENAME', action='store')
-	
-	parser.add_argument("--fit", metavar='ORDER', help='Perform one part modified polynomial fit with specified ORDER, otherwise three part fit', action='store')
 
 	args = parser.parse_args()
 	
 	
-# 	Provide feedback to user and set
+# 	Provide feedback to user and establish arg rules
 	print('')
 	
 	if args.bg:
@@ -324,23 +319,44 @@ if __name__ == '__main__':
 		
 	print('')
 		
-	if args.fit:
-		print('Performing one part polynomial fit with order={}.'.format(int(args.fit)))
-		fitordr = int(args.fit)
+	if str.lower(args.src) == 'libs':
+		ReadFolder = '/Volumes/TRANSFER/LIBS/'
+		CalibFile = 'Pixel-Wavelength-LIBS.xls'
+		Divide1 = 255
+		Divide2 = 1725
+		Pixels = 3648
+		fitordr = 0
+		SkipIdx = 1
+	elif str.lower(args.src) == 'tweez':
+		ReadFolder = '/Volumes/TRANSFER/Raman/'
+		CalibFile = 'Pixel-WaveNumber-Grating600-866.1nm.xls'
+		# 	For SERS suggest Divide1=190, for normal Raman suggest Divide1=130
+		Divide1 = 190
+		Divide2 = 1090
+		Pixels = 1340
+		SkipIdx = 1
+	elif str.lower(args.src) == 'opto':	
+		ReadFolder = '/Volumes/TRANSFER/Raman/'
+		CalibFile = 'Pixel-WaveNumber-Optofluidics.xls'
+		Divide1 = 80
+		Divide2 = 1330
+		Pixels = 1340
+		SkipIdx = 0
+		fitordr = 5
 	else:
-		print('Performing three part fit with default polynomial orders.')		
+		raise Exception('data source must be either libs or tweez or opto')
 
 
-# 	Load wavenumber calibration from file
-	WaveNumber = np.loadtxt(CalibPath+CalibFile, delimiter="\t")
+# 	Load specunits calibration from file
+	specunits = np.loadtxt(CalibPath+CalibFile, delimiter="\t")
 
 
 # 	Read in file names, Hierarchy: SampleID -> MeasurementID -> FileID
-	FileList = list(openFileDialog(DialogCaption='Select spectrum files', \
+	FileList = list(openfdiag(DialogCaption='Select spectrum files', \
 	ReadFolder=ReadFolder, FileFilter=None))
 
 
-# 	Use natural sorting for file list so it looks nicer
+# 	Use natural sorting for file list so it looks neater
 	convert = lambda text: int(text) if text.isdigit() else text
 	alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)]
 	FileList.sort(key=alphanum_key)
@@ -367,10 +383,10 @@ if __name__ == '__main__':
 		print('')
 		print('Processing:', Spectra[i])
 				
-# 		File names to pass to specproc is different	for sample or measurement averaging
+# 		File names to pass to specproc are different for sample vs measurement averaging
 		FileNames = [s for s in FileList if Spectra[i] in s]
 
-		MeanCurve = specproc(FileNames, Spectra[i])
+		Curvefit = specproc(FileNames, Spectra[i])
 
 
 	print('')			
