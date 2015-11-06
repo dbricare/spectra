@@ -10,7 +10,50 @@ Assumes tab-delimited files where first column is spectrum units and second colu
 Begin function definitions
 """
 
+#--------------------------------------------------------------------------------------
+# from numba import jit
+# jit decorator tells Numba to compile this function.
+# The argument types will be inferred by Numba when function is called.
+# @jit
+def modpolyfit(Data,Order=5):
 
+	"""
+	This module contains the background removal method detailed by Lieber et al.
+		
+	The modpolyfit function returns the modified polynomial curvefit for the supplied 
+	data.
+	
+	'Data' is the spectrum to be corrected, it contains a vector of intensity values. 
+	'Order' is the order of the modified polynomial fit to be performed.
+
+	This code uses a convergence criteria and can converge automatically.
+	"""
+
+	if Order == 0:
+		NewCurve = np.ones(Data.shape[0])*(Data.min()-1)
+
+	else:
+	# 	NewCurve = np.zeros(shape=(Data.shape[0]))
+		OldCurve = np.array(Data)
+		Diff = NewCurve-OldCurve
+		Convergence = np.dot(Diff,Diff)
+
+		m = 0
+		while Convergence > 1: # Suggest convergence criteria == intensity resolution
+			P = np.polyfit(range(len(Data)),OldCurve,Order)
+			NewCurve = np.polyval(P,range(len(Data)))
+			np.copyto(OldCurve, NewCurve, where = NewCurve < OldCurve)
+			m+=1
+			Diff = NewCurve - OldCurve
+			Convergence = np.dot(Diff,Diff)
+# 		print('Iterations needed for convergence: ',m,sep='')
+
+
+	CurveFit=np.copy(NewCurve)
+
+
+	return (CurveFit)
+	
 
 #--------------------------------------------------------------------------------------
 def onepartfit(Data, Order=0):
@@ -19,11 +62,12 @@ def onepartfit(Data, Order=0):
 	Single, contiguous modified polynomial fit
 	"""
 
-	from ModPolyFit import lieberfit
+# 	from ModPolyFit import lieberfit
+# 	from numba import jit
 
 
 # Perform modified polynomial fit over entire data range
-	Curvefit = lieberfit(Data, Order)
+	Curvefit = modpolyfit(Data, Order)
 	
 	SmoothCurve = np.copy(Curvefit)		
 
@@ -48,7 +92,7 @@ def threepartfit(Data, Order=5):
 	"""
 
 	import statsmodels.api as sm
-	from ModPolyFit import lieberfit
+# 	from ModPolyFit import lieberfit
 	
 
 	IdxLeft = Divide1
@@ -58,10 +102,10 @@ def threepartfit(Data, Order=5):
 # Perform piecewise modified polynomial fit over middle 4/5 and 1/3 extreme ranges
 	Curvefit = np.zeros(len(Data))
 # 	Middle = np.zeros(len(Data))
-	Curvefit[:IdxLeft] = lieberfit(Data[:IdxLeft],Order-1)
-	Curvefit[IdxRight:] = lieberfit(Data[IdxRight:],Order-1)
-#	Middle[IdxOuter:-IdxOuter] = lieberfit(Data[IdxOuter:-IdxOuter],Order)
-	Curvefit[IdxLeft:IdxRight] = lieberfit(Data[IdxLeft:IdxRight],Order)
+	Curvefit[:IdxLeft] = modpolyfit(Data[:IdxLeft],Order-1)
+	Curvefit[IdxRight:] = modpolyfit(Data[IdxRight:],Order-1)
+#	Middle[IdxOuter:-IdxOuter] = modpolyfit(Data[IdxOuter:-IdxOuter],Order)
+	Curvefit[IdxLeft:IdxRight] = modpolyfit(Data[IdxLeft:IdxRight],Order)
 			
 			
 # Heavy smoothing of background curve to remove discontinuities at dividers
@@ -127,7 +171,6 @@ def specproc(FileNameList, FileBase):
 
 
 # Background file processing
-	BGsub = np.zeros(Pixels)
 	if args.bg:
 		BGfileCount = 3   # must be set manually
 		BGspectrum = np.zeros((Pixels,BGfileCount))
@@ -135,6 +178,8 @@ def specproc(FileNameList, FileBase):
 			BGdata = np.loadtxt(ReadFolder+args.bg+'_'+str(i+1+SkipIdx)+FileExt)
 			BGspectrum[:,i] = BGdata[:,1]
 		BGsub = np.mean(BGspectrum, axis=1)
+	else:
+		BGsub = np.zeros(Pixels)
 			
 			
 # Load files and perform background fit
@@ -240,7 +285,7 @@ def specproc(FileNameList, FileBase):
 			plt.axvline(x=specunits[Divide2],color='k',ls='--',lw=1)
 
 # 			Create min/max plot, first row is not shown in plot (fn expects header row)
-			from plotting.makeplot import fillbtwn
+# 			from plotting.makeplot import fillbtwn
 # 			plt.ioff()
 # 			fillbtwn(Wdata[:,:4], savename=FileBase)
 # 			fillbtwn(Wdata[:,:4], savename=None)
@@ -284,6 +329,7 @@ if __name__ == '__main__':
 	sys.path.append('/Users/dbricare/Documents/Python/mypyutil')
 	from FileOpen import openfdiag
 # 	from . import mypyutil
+	from numba import jit
 
 
 # 	Parse the arguments passed by the user
@@ -324,8 +370,8 @@ if __name__ == '__main__':
 		Divide1 = 255
 		Divide2 = 1725
 		Pixels = 3648
-		fitordr = 0
 		SkipIdx = 0
+		fitordr = 0
 		xlbl = 'Wavelength(nm)'
 	elif str.lower(args.src) == 'tweez':
 		ReadFolder = '/Volumes/TRANSFER/Raman/'
