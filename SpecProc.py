@@ -101,10 +101,8 @@ def threepartfit(Data, Order=5):
 
 # Perform piecewise modified polynomial fit over middle 4/5 and 1/3 extreme ranges
 	Curvefit = np.zeros(len(Data))
-# 	Middle = np.zeros(len(Data))
 	Curvefit[:IdxLeft] = modpolyfit(Data[:IdxLeft],Order-1)
 	Curvefit[IdxRight:] = modpolyfit(Data[IdxRight:],Order-1)
-#	Middle[IdxOuter:-IdxOuter] = modpolyfit(Data[IdxOuter:-IdxOuter],Order)
 	Curvefit[IdxLeft:IdxRight] = modpolyfit(Data[IdxLeft:IdxRight],Order)
 			
 			
@@ -127,9 +125,6 @@ def threepartfit(Data, Order=5):
 	while any(SubtractedResult<=0):
 		SubtractedResult+=10
 
-
-# 	SmoothCurve[StartSmooth:]=signal.savgol_filter(SmoothCurve[StartSmooth:],11,1)	
-		
 		
 	return(SubtractedResult, SmoothCurve)
 
@@ -200,9 +195,9 @@ def specproc(FileNameList, FileBase):
 				print(SkippedList[i])
 		
 		
-# Apply Savitzky-Golay filtering (11-point window, 1st order polynomial)
+# Apply Savitzky-Golay filtering (11-point window, 1st or 2nd order polynomial)
 # Note: larger frames and lower order polynomial fits have stronger smoothing
-		SmoothData[:,i]=signal.savgol_filter(Raw[:,1,i] - 0.8*BGsub,11,1) 
+		SmoothData[:,i]=signal.savgol_filter(Raw[:,1,i] - 0.8*BGsub,11,2) 
 
 
 # Perform modified polynomial fit
