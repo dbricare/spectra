@@ -95,8 +95,8 @@ def threepartfit(Data, Order=5):
 # 	from ModPolyFit import lieberfit
 	
 
-	IdxLeft = Divide1
-	IdxRight = Divide2
+	IdxLeft = divide1
+	IdxRight = divide2
 
 
 # Perform piecewise modified polynomial fit over middle 4/5 and 1/3 extreme ranges
@@ -112,7 +112,7 @@ def threepartfit(Data, Order=5):
 	TruncLeft = max(StartSmooth,IdxLeft)
 # 	Use locally-weighted linear regression to smooth curves over appropriate region
 	lowess = sm.nonparametric.lowess
-	x = range(TruncLeft,Pixels)
+	x = range(TruncLeft,pixels)
 	filt = lowess(Curvefit[TruncLeft:],x,frac=0.1)
 	SmoothCurve[TruncLeft:] = filt[:,1]
 
@@ -158,34 +158,37 @@ def specproc(FileNameList, FileBase):
 		
 # Initiate matrices for spectrum and specunits data.
 	FullName = ['' for i in range(numfiles)]
-	Raw = np.zeros((Pixels,2,numfiles))   # 3d array
-	SmoothData = np.zeros((Pixels,numfiles))   # 2d arrays here on
-	Curve = np.zeros((Pixels,numfiles))
-	SmoothCurve = np.zeros((Pixels,numfiles))
-	SubtractedResult = np.zeros((Pixels,numfiles))
+	SmoothData = np.zeros((pixels,numfiles))   # 2d arrays here on
+	Curve = np.zeros((pixels,numfiles))
+	SmoothCurve = np.zeros((pixels,numfiles))
+	SubtractedResult = np.zeros((pixels,numfiles))
+	
+	if args.src == 'libs':
+		Raw = np.zeros((fullrng,2,numfiles))   # 3d array
+	else:
+		Raw = np.zeros((pixels,2,numfiles))   # 3d array
 
 
 # Background file processing
 	if args.bg:
 		BGfileCount = 3   # must be set manually
-		BGspectrum = np.zeros((Pixels,BGfileCount))
+		BGspectrum = np.zeros((pixels,BGfileCount))
 		for i in range(BGfileCount):
 			BGdata = np.loadtxt(ReadFolder+args.bg+'_'+str(i+1+SkipIdx)+FileExt)
 			BGspectrum[:,i] = BGdata[:,1]
 		BGsub = np.mean(BGspectrum, axis=1)
 	else:
-		BGsub = np.zeros(Pixels)
+		BGsub = np.zeros(pixels)
 			
 			
 # Load files and perform background fit
 	for i in range(numfiles):
 		Raw[:,:,i]=np.loadtxt(SkippedList[i],delimiter="\t")
-		
 	
 # Check for instrument error where consecutive spectra share many identical values
 		if i > 0: 
 			DupChk = sum(Raw[:,1,i] == Raw[:,1,i-1])   # integer-valued, tol=1
-			if DupChk > Pixels/2:
+			if DupChk > pixels/2:
 				print('')
 				import warnings
 				warnmsg='Possible duplicate spectra, {:} identical pixels'.format(DupChk)
@@ -197,7 +200,11 @@ def specproc(FileNameList, FileBase):
 		
 # Apply Savitzky-Golay filtering (11-point window, 1st or 2nd order polynomial)
 # Note: larger frames and lower order polynomial fits have stronger smoothing
-		SmoothData[:,i]=signal.savgol_filter(Raw[:,1,i] - 0.8*BGsub,11,2) 
+		if args.src == 'libs':
+			SmoothData[:,i] = signal.savgol_filter(Raw[divide1:divide2,1,i] -
+			 0.8*BGsub,11,1) 
+		else:
+			SmoothData[:,i] = signal.savgol_filter(Raw[:,1,i] - 0.8*BGsub,11,1) 
 
 
 # Perform modified polynomial fit
@@ -210,7 +217,7 @@ def specproc(FileNameList, FileBase):
 	MeanCurve=np.mean(SmoothCurve,axis=1)
 	
 	
-# 	Perform peak fitting, mean, std, and output all to tab-delimited files
+# 	Perform peak fitting, mean, std, and output all to tab-delimited files using nested function
 
 	def outputRslt(SaveExt):
 		
@@ -276,8 +283,9 @@ def specproc(FileNameList, FileBase):
 			plt.plot(specunits,MeanCurve,color='red')
 			plt.plot(specunits,MeanSmooth,color='blue')
 			plt.title(FileBase+' - Smoothed & curve fit')
-			plt.axvline(x=specunits[Divide1],color='k',ls='--',lw=1)
-			plt.axvline(x=specunits[Divide2],color='k',ls='--',lw=1)
+			if args.src == 'tweez':
+				plt.axvline(x=specunits[divide1],color='k',ls='--',lw=1)
+				plt.axvline(x=specunits[divide2],color='k',ls='--',lw=1)
 
 # 			Create min/max plot, first row is not shown in plot (fn expects header row)
 # 			from plotting.makeplot import fillbtwn
@@ -330,7 +338,7 @@ if __name__ == '__main__':
 # 	Parse the arguments passed by the user
 	parser = argparse.ArgumentParser(description='process Raman spectra')
 
-	parser.add_argument("src", metavar='SOURCE', 
+	parser.add_argument("src", metavar='SOURCE', type=str.lower, 
 	help='either libs or tweez or opto', action='store')
 	
 	parser.add_argument('--sample', 
@@ -359,30 +367,31 @@ if __name__ == '__main__':
 		
 	print('')
 		
-	if str.lower(args.src) == 'libs':
+	if args.src == 'libs':
 		ReadFolder = '/Volumes/TRANSFER/LIBS/'
 		CalibFile = 'Pixel-Wavelength-LIBS.xls'
-		Divide1 = 255
-		Divide2 = 1725
-		Pixels = 3648
+		divide1 = 255
+		divide2 = 1725
+		pixels = divide2-divide1
+		fullrng = 3648
 		SkipIdx = 0
 		fitordr = 0
 		xlbl = 'Wavelength(nm)'
-	elif str.lower(args.src) == 'tweez':
+	elif args.src == 'tweez':
 		ReadFolder = '/Volumes/TRANSFER/Raman/'
 		CalibFile = 'Pixel-WaveNumber-Grating600-866.1nm.xls'
-		# 	For SERS suggest Divide1=190, for normal Raman suggest Divide1=130
-		Divide1 = 190
-		Divide2 = 1090
-		Pixels = 1340
+		# 	For SERS suggest divide1=190, for normal Raman suggest divide1=130
+		divide1 = 190
+		divide2 = 1090
+		pixels = 1340
 		SkipIdx = 1
 		xlbl = 'Wave number(1/cm)'
-	elif str.lower(args.src) == 'opto':	
+	elif args.src == 'opto':	
 		ReadFolder = '/Volumes/TRANSFER/Raman/'
 		CalibFile = 'Pixel-WaveNumber-Optofluidics.xls'
-		Divide1 = 80
-		Divide2 = 1330
-		Pixels = 1340
+		divide1 = 80
+		divide2 = 1330
+		pixels = 1340
 		SkipIdx = 0
 		fitordr = 5
 		xlbl = 'Wave number(1/cm)'
@@ -390,8 +399,10 @@ if __name__ == '__main__':
 		raise Exception('data source must be either libs or tweez or opto')
 
 
-# 	Load specunits calibration from file
+# 	Load specunits calibration from file if necessary
 	specunits = np.loadtxt(CalibPath+CalibFile, delimiter="\t")
+	if args.src == 'libs':
+		specunits = specunits[divide1:divide2]
 
 
 # 	Read in file names, Hierarchy: SampleID -> MeasurementID -> FileID
