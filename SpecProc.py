@@ -18,33 +18,30 @@ Begin function definitions
 def modpolyfit(Data,Order=5):
 
 	"""
-	This module contains the background removal method detailed by Lieber et al.
-		
-	The modpolyfit function returns the modified polynomial curvefit for the supplied 
-	data.
-	
-	'Data' is the spectrum to be corrected, it contains a vector of intensity values. 
-	'Order' is the order of the modified polynomial fit to be performed.
+This function contains the background removal method detailed by Lieber et al. and returns the modified polynomial curvefit for the supplied data.
 
-	This code uses a convergence criteria and can converge automatically.
+'Data' is the spectrum to be corrected, it contains a vector of intensity values. 
+'Order' is the order of the modified polynomial fit to be performed.
+
+This code uses a convergence criteria and can converge automatically.
 	"""
 
-	if Order == 0:
-		NewCurve = np.ones(Data.shape[0])*(Data.min()-1)
+	NewCurve = np.ones(Data.shape[0])*(Data.min()-1)
 
-	else:
-	# 	NewCurve = np.zeros(shape=(Data.shape[0]))
-		OldCurve = np.array(Data)
-		Diff = NewCurve-OldCurve
+	if Order > 0:
+		OldCurve = np.copy(Data)
+		Diff = OldCurve - NewCurve
 		Convergence = np.dot(Diff,Diff)
 
 		m = 0
 		while Convergence > 1: # Suggest convergence criteria == intensity resolution
 			P = np.polyfit(range(len(Data)),OldCurve,Order)
 			NewCurve = np.polyval(P,range(len(Data)))
+# 			Replace OldCurve values with NewCurve values that are smaller
 			np.copyto(OldCurve, NewCurve, where = NewCurve < OldCurve)
 			m+=1
-			Diff = NewCurve - OldCurve
+# 			Stop when the squared difference is below convergence criteria
+			Diff = OldCurve - NewCurve
 			Convergence = np.dot(Diff,Diff)
 # 		print('Iterations needed for convergence: ',m,sep='')
 
@@ -61,10 +58,6 @@ def onepartfit(Data, Order=0):
 	"""
 	Single, contiguous modified polynomial fit
 	"""
-
-# 	from ModPolyFit import lieberfit
-# 	from numba import jit
-
 
 # Perform modified polynomial fit over entire data range
 	Curvefit = modpolyfit(Data, Order)
@@ -91,25 +84,17 @@ def threepartfit(Data, Order=5):
 	Piecewise modified polynomial fit
 	"""
 
-	import statsmodels.api as sm
-# 	from ModPolyFit import lieberfit
-	
-
-	IdxLeft = divide1
-	IdxRight = divide2
-
-
 # Perform piecewise modified polynomial fit over middle 4/5 and 1/3 extreme ranges
 	Curvefit = np.zeros(len(Data))
-	Curvefit[:IdxLeft] = modpolyfit(Data[:IdxLeft],Order-1)
-	Curvefit[IdxRight:] = modpolyfit(Data[IdxRight:],Order-1)
-	Curvefit[IdxLeft:IdxRight] = modpolyfit(Data[IdxLeft:IdxRight],Order)
+	Curvefit[:divide1] = modpolyfit(Data[:divide1],Order-1)
+	Curvefit[divide2:] = modpolyfit(Data[divide2:],Order-1)
+	Curvefit[divide1:divide2] = modpolyfit(Data[divide1:divide2],Order)
 			
 			
 # Heavy smoothing of background curve to remove discontinuities at dividers
 	SmoothCurve=np.copy(Curvefit)
-	StartSmooth = max(int(IdxLeft-10),0)
-	TruncLeft = max(StartSmooth,IdxLeft)
+	StartSmooth = max(int(divide1-10),0)
+	TruncLeft = max(StartSmooth,divide1)
 # 	Use locally-weighted linear regression to smooth curves over appropriate region
 	lowess = sm.nonparametric.lowess
 	x = range(TruncLeft,pixels)
@@ -136,7 +121,7 @@ def specproc(FileNameList, FileBase):
 	"""
 	Heavy lifting for spectrum processing
 	"""
-
+	import pandas as pd
 
 # Remove files (typically SkipIdx=1, the first file) due to instrument issues
 	if SkipIdx > 0:
@@ -156,7 +141,7 @@ def specproc(FileNameList, FileBase):
 	currfiles = [s.replace(ReadFolder,'').replace(FileExt,'') for s in SkippedList]
 		
 		
-# Initiate matrices for spectrum and specunits data.
+# Initiate matrices for spectrum data.
 	FullName = ['' for i in range(numfiles)]
 	SmoothData = np.zeros((pixels,numfiles))   # 2d arrays here on
 	Curve = np.zeros((pixels,numfiles))
@@ -209,6 +194,7 @@ def specproc(FileNameList, FileBase):
 
 # Perform modified polynomial fit
 		if str.lower(args.src)=='tweez':
+			import statsmodels.api as sm
 			SubtractedResult[:,i],SmoothCurve[:,i] = threepartfit(SmoothData[:,i],fitordr)
 		else:   # args.src is libs or opto
 			SubtractedResult[:,i],SmoothCurve[:,i] = onepartfit(SmoothData[:,i],fitordr)
@@ -216,23 +202,18 @@ def specproc(FileNameList, FileBase):
 	MeanSmooth=np.mean(SmoothData,axis=1)
 	MeanCurve=np.mean(SmoothCurve,axis=1)
 	
-	
-# 	Perform peak fitting, mean, std, and output all to tab-delimited files using nested function
+# 	
+# 	Perform peak fit, mean, std, and output all to xlsx files using loop
+# 	
+	SaveExts = ('-SFP','-SFM','-SF')  # p-norm (l1), min-max and none normalizations
 
-	def outputRslt(SaveExt):
-		
-		import pandas as pd
-		
-		if SaveExt == '-SF':   # No normalization
-			RsltData = np.copy(SubtractedResult)
-		elif SaveExt == '-SFN':   # p-norm normalization
-			RsltData = normalize(SubtractedResult,norm='l1',axis=0)
-		elif SaveExt == '-SFM':   # Min-max normalization
-			MMscale = MinMaxScaler()
-			RsltData = MMscale.fit_transform(SubtractedResult)
-		else:
-			raise Exception('Unknown processing method specified by programmer')
+	mmscale = MinMaxScaler()
 
+	RsltDatas = (normalize(SubtractedResult,norm='l1',axis=0),
+	mmscale.fit_transform(SubtractedResult), 
+	np.copy(SubtractedResult))
+
+	for SaveExt, RsltData in zip(SaveExts, RsltDatas):
 
 # 	Calculate mean & std dev of smoothed/fitted data and background removal curves for visualization and create dataframe
 		Mean = np.mean(RsltData,axis=1)
@@ -261,7 +242,7 @@ def specproc(FileNameList, FileBase):
 		dfpks.index = range(dfpks.shape[0])
 
 
-# 		Use pandas to save results as an Excel file, include each spectrum
+# 		Use pandas to save results as an Excel file, include all processed spectra
 		dfrslt = pd.DataFrame(data=RsltData, columns=currfiles)
 
 		dfwrite = pd.concat([dfstat, dfpks, dfrslt], axis=1)
@@ -269,7 +250,7 @@ def specproc(FileNameList, FileBase):
 		dfwrite.to_excel(namewrite, header=True, index=False)
 	
 	
-# 		Visualize results just once not three times
+# 		Visualize results just once not three times for each normalization
 		if SaveExt == '-SF':
 			plt.rc('font', family = 'Arial', size='14')
 			plt.ion()
@@ -295,12 +276,7 @@ def specproc(FileNameList, FileBase):
 # 			plt.ion()
 	
 	
-# 	No need to print out results from list comprehension	
-	NoDisplay = [outputRslt(s) for s in ['-SFM','-SFN','-SF']]
-	
-	
 	return(MeanCurve)
-
 
 
 """
@@ -308,11 +284,10 @@ End function definitions
 """
 
 
-
 #--------------------------------------------------------------------------------------
 # Main
 
-# As of 2015-09-29, this file is not configured for use as an importable module
+# As of 2015-09-29, this file is not configured for use as an importable module, functions defined above call global variables from __main__
 if __name__ == '__main__':
 
 
@@ -331,8 +306,6 @@ if __name__ == '__main__':
 	import sys
 	sys.path.append('/Users/dbricare/Documents/Python/mypyutil')
 	from FileOpen import openfdiag
-# 	from . import mypyutil
-	from numba import jit
 
 
 # 	Parse the arguments passed by the user
@@ -348,24 +321,6 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	
-	
-# 	Provide feedback to user and establish arg rules
-	print('')
-	
-	if args.bg:
-		print('All spectra will be subtracted from indicated background.')
-		print('')
-
-	print('Each sample has several measurements which consist of several spectra.')
-
-	if args.sample:
-		print('Results will be averaged across each sample.')
-		Suffix = re.compile('[-]\d+_\d+[.]\w+$') # Remove Measurement & Spectrum ID	
-	else:
-		print('Results will be averaged across each measurement.')
-		Suffix = re.compile('_\d+[.]\w+$') # Remove Spectrum ID
-		
-	print('')
 		
 	if args.src == 'libs':
 		ReadFolder = '/Volumes/TRANSFER/LIBS/'
@@ -399,13 +354,35 @@ if __name__ == '__main__':
 		raise Exception('data source must be either libs or tweez or opto')
 
 
-# 	Load specunits calibration from file if necessary
+# 	Provide feedback to user and establish arg rules
+	print('')
+	
+	print('File organization hierarchy: Sample -> Measurement -> Spectra.')
+	
+	if args.bg:
+		print('')
+		print('All spectra will be subtracted from indicated background.')
+
+	print('')
+
+	if args.sample:
+		print('Results will be averaged across each sample.')
+		Suffix = re.compile('[-]\d+_\d+[.]\w+$') # Remove Measurement & Spectrum ID	
+	else:
+		print('Results will be averaged across each measurement.')
+		Suffix = re.compile('_\d+[.]\w+$') # Remove Spectrum ID
+		
+	print('')
+	
+
+# 	Load spectral units calibration from file (wavelength or wavenumber)
 	specunits = np.loadtxt(CalibPath+CalibFile, delimiter="\t")
 	if args.src == 'libs':
 		specunits = specunits[divide1:divide2]
 
 
 # 	Read in file names, Hierarchy: SampleID -> MeasurementID -> FileID
+	print('Select files for analysis from dialog window...')
 	FileList = list(openfdiag(DialogCaption='Select spectrum files', \
 	ReadFolder=ReadFolder, FileFilter=None))
 
@@ -433,14 +410,14 @@ if __name__ == '__main__':
 
 
 # 	For loop used to process files and return mean curve for visual check
-	for i in range(len(Spectra)):
+	for spectrum in Spectra:
 		print('')
-		print('Processing:', Spectra[i])
+		print('Processing:', spectrum)
 				
 # 		File names to pass to specproc are different for sample vs measurement averaging
-		FileNames = [s for s in FileList if Spectra[i] in s]
+		FileNames = [s for s in FileList if spectrum in s]
 
-		Curvefit = specproc(FileNames, Spectra[i])
+		Curvefit = specproc(FileNames, spectrum)
 
 
 	print('')			
