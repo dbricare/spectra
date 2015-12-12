@@ -353,15 +353,12 @@ if __name__ == '__main__':
 	else:
 		raise Exception("data source must be 'libs' or 'tweez' or 'opto'")
 
+	print('')
 
 # 	Provide feedback to user and establish arg rules
-	print('')
-	
 	if args.bg:
-		print('')
 		print('All spectra will be subtracted from indicated background.')
-
-	print('')
+		print('')
 
 	if args.avg == 'sample':
 		print('Results will be averaged across each sample.')
