@@ -309,13 +309,13 @@ if __name__ == '__main__':
 
 
 # 	Parse the arguments passed by the user
-	parser = argparse.ArgumentParser(description='process Raman spectra')
+	parser = argparse.ArgumentParser(description='File organization hierarchy: Sample -> Measurement -> Spectra')
 
 	parser.add_argument("src", metavar='SOURCE', type=str.lower, 
-	help='either libs or tweez or opto', action='store')
+	help="data source is 'libs' or 'tweez' or 'opto'", action='store')
 	
-	parser.add_argument('--sample', 
-	help='average spectra by sample instead of by measurement', action='store_true')
+	parser.add_argument('avg', metavar='LEVEL', type=str.lower,
+	help="averaging is by 'sample' or 'measurement' or 'none'", action='store')
 
 	parser.add_argument("--bg", metavar='BGFILENAME', help='subtract BGFILENAME from spectra, exclude file extension and spectrum id in BGFILENAME', action='store')
 
@@ -351,13 +351,11 @@ if __name__ == '__main__':
 		fitordr = 5
 		xlbl = 'Wave number(1/cm)'
 	else:
-		raise Exception('data source must be either libs or tweez or opto')
+		raise Exception("data source must be 'libs' or 'tweez' or 'opto'")
 
 
 # 	Provide feedback to user and establish arg rules
 	print('')
-	
-	print('File organization hierarchy: Sample -> Measurement -> Spectra.')
 	
 	if args.bg:
 		print('')
@@ -365,12 +363,17 @@ if __name__ == '__main__':
 
 	print('')
 
-	if args.sample:
+	if args.avg == 'sample':
 		print('Results will be averaged across each sample.')
 		Suffix = re.compile('[-]\d+_\d+[.]\w+$') # Remove Measurement & Spectrum ID	
-	else:
+	elif args.avg =='measurement':
 		print('Results will be averaged across each measurement.')
-		Suffix = re.compile('_\d+[.]\w+$') # Remove Spectrum ID
+		Suffix = re.compile('\W\d+[.]\w+$') # Remove Spectrum ID
+	elif args.avg == 'none':
+		print('Results will not be averaged.')	
+		Suffix = re.compile('[.]\w+$')
+	else:
+		raise Exception("averaging must be 'sample' or 'measurement' or 'none'")
 		
 	print('')
 	
