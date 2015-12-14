@@ -252,21 +252,34 @@ def specproc(FileNameList, FileBase):
 	
 # 		Visualize results just once not three times for each normalization
 		if SaveExt == '-SF':
-			plt.rc('font', family = 'Arial', size='14')
+			plt.rc('font', family = 'Arial', size='12')
 			plt.ion()
 	
-			plt.figure()
-			plt.plot(specunits,Mean,color='blue')
-			plt.plot(pkloc,pkint+max(Mean)*0.03,"o",color="green",markersize=6)
-			plt.title(FileBase+' - Subtracted with peaks')
+			fig, axlst = plt.subplots(1,2, figsize=(12,5))
+			fig.suptitle(FileBase, fontsize=14)
+			axlst[0].plot(specunits,Mean,color='blue')
+			axlst[0].plot(pkloc,pkint+max(Mean)*0.03,"o",color="green",markersize=6)
+			axlst[0].set_title ('Subtracted with peaks')
 
-			plt.figure()
-			plt.plot(specunits,MeanCurve,color='red')
-			plt.plot(specunits,MeanSmooth,color='blue')
-			plt.title(FileBase+' - Smoothed & curve fit')
+			axlst[1].plot(specunits,MeanCurve,color='red')
+			axlst[1].plot(specunits,MeanSmooth,color='blue')
+			axlst[1].set_title('Smoothed & curve fit')
 			if args.src == 'tweez':
-				plt.axvline(x=specunits[divide1],color='k',ls='--',lw=1)
-				plt.axvline(x=specunits[divide2],color='k',ls='--',lw=1)
+				axlst[1].axvline(x=specunits[divide1],color='k',ls='--',lw=1)
+				axlst[1].axvline(x=specunits[divide2],color='k',ls='--',lw=1)
+
+# 			plt.figure()
+# 			plt.plot(specunits,Mean,color='blue')
+# 			plt.plot(pkloc,pkint+max(Mean)*0.03,"o",color="green",markersize=6)
+# 			plt.title(FileBase+' - Subtracted with peaks')
+# 
+# 			plt.figure()
+# 			plt.plot(specunits,MeanCurve,color='red')
+# 			plt.plot(specunits,MeanSmooth,color='blue')
+# 			plt.title(FileBase+' - Smoothed & curve fit')
+# 			if args.src == 'tweez':
+# 				plt.axvline(x=specunits[divide1],color='k',ls='--',lw=1)
+# 				plt.axvline(x=specunits[divide2],color='k',ls='--',lw=1)
 
 # 			Create min/max plot, first row is not shown in plot (fn expects header row)
 # 			from plotting.makeplot import fillbtwn
