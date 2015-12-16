@@ -257,37 +257,16 @@ def specproc(FileNameList, FileBase):
 	
 			fig, axlst = plt.subplots(1,2, figsize=(12,5))
 			fig.suptitle(FileBase, fontsize=14)
-			axlst[0].plot(specunits,Mean,color='blue')
-			axlst[0].plot(pkloc,pkint+max(Mean)*0.03,"o",color="green",markersize=6)
-			axlst[0].set_title ('Subtracted with peaks')
+			axlst[1].plot(specunits,Mean,color='blue')
+			axlst[1].plot(pkloc,pkint+max(Mean)*0.03,"o",color="green",markersize=6)
+			axlst[1].set_title ('Subtracted with peaks')
 
-			axlst[1].plot(specunits,MeanCurve,color='red')
-			axlst[1].plot(specunits,MeanSmooth,color='blue')
-			axlst[1].set_title('Smoothed & curve fit')
+			axlst[0].plot(specunits,MeanCurve,color='red')
+			axlst[0].plot(specunits,MeanSmooth,color='blue')
+			axlst[0].set_title('Smoothed & curve fit')
 			if args.src == 'tweez':
-				axlst[1].axvline(x=specunits[divide1],color='k',ls='--',lw=1)
-				axlst[1].axvline(x=specunits[divide2],color='k',ls='--',lw=1)
-
-# 			plt.figure()
-# 			plt.plot(specunits,Mean,color='blue')
-# 			plt.plot(pkloc,pkint+max(Mean)*0.03,"o",color="green",markersize=6)
-# 			plt.title(FileBase+' - Subtracted with peaks')
-# 
-# 			plt.figure()
-# 			plt.plot(specunits,MeanCurve,color='red')
-# 			plt.plot(specunits,MeanSmooth,color='blue')
-# 			plt.title(FileBase+' - Smoothed & curve fit')
-# 			if args.src == 'tweez':
-# 				plt.axvline(x=specunits[divide1],color='k',ls='--',lw=1)
-# 				plt.axvline(x=specunits[divide2],color='k',ls='--',lw=1)
-
-# 			Create min/max plot, first row is not shown in plot (fn expects header row)
-# 			from plotting.makeplot import fillbtwn
-# 			plt.ioff()
-# 			fillbtwn(Wdata[:,:4], savename=FileBase)
-# 			fillbtwn(Wdata[:,:4], savename=None)
-# 			plt.ion()
-	
+				axlst[0].axvline(x=specunits[divide1],color='k',ls='--',lw=1)
+				axlst[0].axvline(x=specunits[divide2],color='k',ls='--',lw=1)
 	
 	return(MeanCurve)
 
@@ -300,7 +279,7 @@ End function definitions
 #--------------------------------------------------------------------------------------
 # Main
 
-# As of 2015-09-29, this file is not configured for use as an importable module, functions defined above call global variables from __main__
+# As of 2015-09-29, this file is not configured for use as an importable module, some functions defined above call global variables from __main__
 if __name__ == '__main__':
 
 
@@ -327,14 +306,15 @@ if __name__ == '__main__':
 	parser.add_argument("src", metavar='SOURCE', type=str.lower, 
 	help="data source is 'libs' or 'tweez' or 'opto'", action='store')
 	
-	parser.add_argument('avg', metavar='LEVEL', type=str.lower,
+	parser.add_argument('avg', metavar='AVERAGING', type=str.lower,
 	help="averaging is by 'sample' or 'measurement' or 'none'", action='store')
 
 	parser.add_argument("--bg", metavar='BGFILENAME', help='subtract BGFILENAME from spectra, exclude file extension and spectrum id in BGFILENAME', action='store')
 
 	args = parser.parse_args()
-	
-		
+
+
+# 	Provide feedback to user and establish arg rules		
 	if args.src == 'libs':
 		ReadFolder = '/Volumes/TRANSFER/LIBS/'
 		CalibFile = 'Pixel-Wavelength-LIBS.xls'
@@ -368,7 +348,7 @@ if __name__ == '__main__':
 
 	print('')
 
-# 	Provide feedback to user and establish arg rules
+
 	if args.bg:
 		print('All spectra will be subtracted from indicated background.')
 		print('')
@@ -400,12 +380,6 @@ if __name__ == '__main__':
 	ReadFolder=ReadFolder, FileFilter=None))
 
 
-# 	Use natural sorting for file list so it looks neater
-	convert = lambda text: int(text) if text.isdigit() else text
-	alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)]
-	FileList.sort(key=alphanum_key)
-
-
 # 	Identify file extension, typically .xls or .txt, check that all are the same
 	FileExt = ''.join(re.findall('[.]\w+$',FileList[0]))   # Convert list to str
 	if not all(FileExt in s for s in FileList):
@@ -419,11 +393,17 @@ if __name__ == '__main__':
 # 	Begin filename processing
 	RemoveDir = [s.replace(ReadFolder,'') for s in FileList]
 	RemoveSuffix = [Suffix.sub('',s) for s in RemoveDir]
-	Spectra = list(set(RemoveSuffix))
+	spectra = list(set(RemoveSuffix))
+
+
+# 	Use natural sorting for file list so it looks neater
+	convert = lambda text: int(text) if text.isdigit() else text
+	alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)]
+	spectra.sort(key=alphanum_key)
 
 
 # 	For loop used to process files and return mean curve for visual check
-	for spectrum in Spectra:
+	for spectrum in spectra:
 		print('')
 		print('Processing:', spectrum)
 				
