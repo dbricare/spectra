@@ -221,8 +221,12 @@ def specproc(FileNameList, FileBase):
 		specmin = np.amin(RsltData,axis=1)
 		specmax = np.amax(RsltData,axis=1)
 		
-		dsstat = list(zip(specunits, Mean, Std, specmin, specmax))
-		colstat = [xlbl, 'Mean', 'Std dev', 'Min', 'Max']
+		dsspec = list(zip(specunits, Mean, Std))
+		colspec = [xlbl, 'Mean', 'Std Dev']
+		dfspec = pd.DataFrame(data=dsspec, columns=colspec)
+		
+		dsstat = list(zip(specmin, specmax))
+		colstat = ['Min', 'Max']
 		dfstat = pd.DataFrame(data=dsstat, columns=colstat)
 
 
@@ -245,7 +249,7 @@ def specproc(FileNameList, FileBase):
 # 		Use pandas to save results as an Excel file, include all processed spectra
 		dfrslt = pd.DataFrame(data=RsltData, columns=currfiles)
 
-		dfwrite = pd.concat([dfstat, dfpks, dfrslt], axis=1)
+		dfwrite = pd.concat([dfspec, dfpks, dfstat, dfrslt], axis=1)
 		namewrite = WriteFolder+FileBase+SaveExt+'.xlsx'
 		dfwrite.to_excel(namewrite, header=True, index=False)
 	
@@ -417,4 +421,4 @@ if __name__ == '__main__':
 	print('Elapsed time:', round(time.time()-startTime,1), 'seconds')
 
 
-	# import ipdb; ipdb.set_trace() # Breakpoint	
+# import ipdb; ipdb.set_trace() # Breakpoint	
